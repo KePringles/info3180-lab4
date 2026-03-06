@@ -1,6 +1,6 @@
 import os
 from app import app, db, login_manager
-from flask import render_template, request, redirect, url_for, flash, session, abort
+from flask import render_template, request, redirect, url_for, flash, session, abort, send_from_directory
 from flask_login import login_user, logout_user, current_user, login_required
 from werkzeug.security import check_password_hash
 from werkzeug.utils import secure_filename
@@ -29,14 +29,27 @@ def upload():
     form = UploadForm()
 
     if form.validate_on_submit():
-        # Get file data and save to your uploads folder
         photo = form.photo.data
         filename = secure_filename(photo.filename)
         photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
         flash('File Saved', 'success')
-        return redirect(url_for('home'))  # Update to redirect to all uploaded images route
+        return redirect(url_for('files'))
 
     return render_template('upload.html', form=form)
+
+
+@app.route('/files')
+@login_required
+def files():
+    """Render a page that lists all uploaded image files."""
+    images = get_uploaded_images()
+    return render_template('files.html', images=images)
+
+
+@app.route('/uploads/<filename>')
+def get_image(filename):
+    """Return an uploaded image file from the uploads folder."""
+    return send_from_directory(os.path.join(os.getcwd(), app.config['UPLOAD_FOLDER']), filename)
 
 
 @app.route('/login', methods=['POST', 'GET'])
@@ -47,12 +60,7 @@ def login():
         username = form.username.data
         password = form.password.data
 
-        
         user = UserProfile.query.filter_by(username=username).first()
-        
-        if user:
-            from werkzeug.security import check_password_hash
-            print("HASH CHECK:", check_password_hash(user.password, password))  # debug
 
         if user is not None and check_password_hash(user.password, password):
             login_user(user)
@@ -60,9 +68,6 @@ def login():
             return redirect(url_for('upload'))
         else:
             flash('Invalid username or password.', 'danger')
-    else:
-        print("FORM ERRORS:", form.errors)            # debug
-    
 
     return render_template("login.html", form=form)
 
@@ -77,6 +82,17 @@ def load_user(id):
 ###
 # The functions below should be applicable to all Flask apps.
 ###
+
+def get_uploaded_images():
+    """Iterate over the uploads folder and return a list of image filenames."""
+    images = []
+    upload_folder = os.path.join(os.getcwd(), app.config['UPLOAD_FOLDER'])
+    for subdir, dirs, files in os.walk(upload_folder):
+        for file in files:
+            if file.lower().endswith(('.jpg', '.jpeg', '.png')):
+                images.append(file)
+    return images
+
 
 # Flash errors from the form if validation fails
 def flash_errors(form):
